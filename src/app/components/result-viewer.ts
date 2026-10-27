@@ -69,7 +69,7 @@ import { StatusBadge } from './status-badge';
             @if (f && f.mt !== m.mt) { <span class="ai">AI: {{ m.mt | number: '1.2-2' }} mm</span> }
           </div>
           <div class="metric">
-            <span class="label">PA · Góc lông chim</span>
+            <span class="label">PA · Góc lông vũ</span>
             <span class="value">{{ (f?.pa ?? m.pa) | number: '1.2-2' }}<small>°</small></span>
             @if (f && f.pa !== m.pa) { <span class="ai">AI: {{ m.pa | number: '1.2-2' }}°</span> }
           </div>

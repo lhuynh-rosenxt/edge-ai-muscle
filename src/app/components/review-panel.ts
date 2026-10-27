@@ -57,11 +57,12 @@ const REVIEWER_KEY = 'edge-ai.reviewer';
     }
   `,
   styles: `
+    :host { display: block; min-width: 0; }
     h3 { font-size: .95rem; margin: 0 0 .5rem; }
     .hint { font-size: .8rem; color: var(--muted); margin: 0 0 .75rem; }
-    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; }
-    label { display: flex; flex-direction: column; gap: .25rem; font-size: .78rem; font-weight: 600; color: var(--muted); margin-bottom: .6rem; }
-    input, textarea { font: inherit; font-size: .9rem; font-weight: 500; color: var(--text); padding: .45rem .55rem; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); resize: vertical; }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; }
+    label { display: flex; flex-direction: column; min-width: 0; gap: .25rem; font-size: .78rem; font-weight: 600; color: var(--muted); margin-bottom: .6rem; }
+    input, textarea { width: 100%; min-width: 0; box-sizing: border-box; font: inherit; font-size: .9rem; font-weight: 500; color: var(--text); padding: .45rem .55rem; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); resize: vertical; }
     input:focus, textarea:focus { outline: 2px solid var(--primary); outline-offset: -1px; }
     input.changed { border-color: var(--warn); background: var(--warn-soft); }
     .actions { display: flex; flex-wrap: wrap; gap: .5rem; }
