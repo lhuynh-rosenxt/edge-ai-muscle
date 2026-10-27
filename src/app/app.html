@@ -12,10 +12,10 @@
   <div class="device">
     @if (device(); as d) {
       <span class="dot" [class.on]="d.online"></span>
-      <div class="dev-info">
+      <div class="dev-info" [title]="d.error ?? ''">
         <strong>{{ d.device }}</strong>
         <span>
-          {{ d.online ? 'Trực tuyến' : 'Mất kết nối' }} · {{ d.model }}
+          {{ d.online ? 'Trực tuyến' : 'Mất kết nối' }} · {{ d.error ?? d.model }}
           @if (d.gpuTemp != null) { · GPU {{ d.gpuTemp }}°C }
           @if (d.cpuTemp != null) { · CPU {{ d.cpuTemp }}°C }
           @if (d.gpuLoad != null) { · {{ d.gpuLoad }}% }

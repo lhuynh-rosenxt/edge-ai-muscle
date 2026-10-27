@@ -38,8 +38,15 @@ export class App {
   }
 
   protected async refreshDevice(): Promise<void> {
-    this.device.set(await this.api.health());
+    if (this.healthInFlight) return;
+    this.healthInFlight = true;
+    try {
+      this.device.set(await this.api.health());
+    } finally {
+      this.healthInFlight = false;
+    }
   }
+  private healthInFlight = false;
 
   protected openSettings(): void {
     this.draftUrl.set(this.api.settings().baseUrl);

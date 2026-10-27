@@ -1,13 +1,21 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { Injectable, inject, isDevMode, signal } from '@angular/core';
-import { TimeoutError, firstValueFrom, timeout } from 'rxjs';
+import { Injectable, inject, signal } from '@angular/core';
+import { Observable, TimeoutError, firstValueFrom, timeout } from 'rxjs';
 import {
   DeviceResources, DeviceStatus, EdgeSettings, InferenceResult, Point, QualityRejectedError, QualityReport,
 } from '../models';
 
 const SETTINGS_KEY = 'edge-ai.settings.v2';
-// The /jetson proxy only exists under `ng serve`; deployed builds must be configured in Settings.
-export const DEFAULT_BASE_URL = isDevMode() ? '/jetson' : '';
+export const DEFAULT_BASE_URL = 'https://edgeai.kiromerlab.com:8000';
+// /health samples device resources and can be slow on the Jetson; a short timeout aborts the body mid-download.
+const HEALTH_TIMEOUT_MS = 15000;
+const PREDICT_TIMEOUT_MS = 60000;
+
+class EmptyBodyError extends Error {
+  constructor() {
+    super('Jetson trả về HTTP 200 nhưng nội dung rỗng.');
+  }
+}
 
 /** Response of POST /predict (see README_API.md). */
 interface PredictResponse {
@@ -34,6 +42,20 @@ export class EdgeApiService {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
   }
 
+  /** Reads the body as text so an empty/truncated 200 response yields a clear error instead of null. */
+  private async readJson(req: Observable<string>, ms: number): Promise<Record<string, unknown>> {
+    const text = await firstValueFrom(req.pipe(timeout(ms)));
+    if (!text?.trim()) throw new EmptyBodyError();
+    let body: unknown;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      throw new Error(`Phản hồi không phải JSON: ${text.slice(0, 120)}`);
+    }
+    if (!isObject(body)) throw new Error('Phản hồi JSON không đúng định dạng.');
+    return body;
+  }
+
   async health(): Promise<DeviceStatus> {
     const { baseUrl, mock } = this.settings();
     if (mock) {
@@ -50,8 +72,9 @@ export class EdgeApiService {
       return { online: false, device: 'Jetson Nano', model: 'Chưa cấu hình địa chỉ API', mode: 'live' };
     }
     try {
-      const r = await firstValueFrom(
-        this.http.get<Record<string, unknown>>(`${baseUrl}/health`).pipe(timeout(5000)),
+      const r = await this.readJson(
+        this.http.get(`${baseUrl}/health`, { responseType: 'text' }),
+        HEALTH_TIMEOUT_MS,
       );
       const status = r['status'];
       const res = parseResources(isObject(r['resources']) ? r['resources'] : r);
@@ -65,8 +88,10 @@ export class EdgeApiService {
         ramUsedMb: res.ramUsedMb,
         mode: 'live',
       };
-    } catch {
-      return { online: false, device: 'Jetson Nano', model: baseUrl, mode: 'live' };
+    } catch (e) {
+      const error = describeError(e, baseUrl, HEALTH_TIMEOUT_MS);
+      console.warn('[edge-api] /health failed:', error, e);
+      return { online: false, device: 'Jetson Nano', model: baseUrl, mode: 'live', error };
     }
   }
 
@@ -81,22 +106,16 @@ export class EdgeApiService {
 
     let r: PredictResponse;
     try {
-      r = await firstValueFrom(
-        this.http.post<PredictResponse>(`${baseUrl}/predict`, form).pipe(timeout(30000)),
-      );
+      r = (await this.readJson(
+        this.http.post(`${baseUrl}/predict`, form, { responseType: 'text' }),
+        PREDICT_TIMEOUT_MS,
+      )) as unknown as PredictResponse;
     } catch (e) {
-      if (e instanceof TimeoutError) throw new Error('Quá thời gian chờ phản hồi từ Jetson (30 s).');
-      if (e instanceof HttpErrorResponse) {
-        if (e.status === 0) {
-          throw new Error(`Không kết nối được tới ${baseUrl} (mạng, CORS hoặc tường lửa chặn).`);
-        }
-        const detail = errorDetail(e.error);
-        if ([400, 415, 422].includes(e.status)) {
-          throw new QualityRejectedError([detail ?? 'Ảnh không hợp lệ hoặc không giải mã được.']);
-        }
-        throw new Error(`HTTP ${e.status}: ${detail ?? e.statusText}`);
+      if (e instanceof HttpErrorResponse && [400, 415, 422].includes(e.status)) {
+        throw new QualityRejectedError([errorDetail(e.error) ?? 'Ảnh không hợp lệ hoặc không giải mã được.']);
       }
-      throw e;
+      console.warn('[edge-api] /predict failed:', e);
+      throw new Error(describeError(e, baseUrl, PREDICT_TIMEOUT_MS));
     }
 
     if (![r.pa_deg, r.fl_mm, r.mt_mm].every((v) => typeof v === 'number' && Number.isFinite(v))) {
@@ -120,7 +139,10 @@ export class EdgeApiService {
 function loadSettings(): EdgeSettings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    if (raw) return JSON.parse(raw) as EdgeSettings;
+    if (raw) {
+      const settings = JSON.parse(raw) as EdgeSettings;
+      return { ...settings, baseUrl: settings.baseUrl?.trim() || DEFAULT_BASE_URL };
+    }
   } catch { /* ignore corrupted storage */ }
   return { baseUrl: DEFAULT_BASE_URL, mock: false };
 }
@@ -149,9 +171,25 @@ function parseResources(o: Record<string, unknown>): DeviceResources {
   };
 }
 
+function describeError(e: unknown, baseUrl: string, ms: number): string {
+  if (e instanceof TimeoutError) return `Quá thời gian chờ phản hồi từ Jetson (${ms / 1000} s).`;
+  if (e instanceof HttpErrorResponse) {
+    if (e.status === 0) return `Không kết nối được tới ${baseUrl} (mạng, CORS, tường lửa hoặc kết nối bị ngắt giữa chừng).`;
+    return `HTTP ${e.status}: ${errorDetail(e.error) ?? e.statusText}`;
+  }
+  return e instanceof Error ? e.message : 'Lỗi không xác định';
+}
+
 /** FastAPI errors look like {detail: string} or {detail: [{msg}]}. */
 function errorDetail(body: unknown): string | undefined {
-  if (typeof body === 'string') return body.slice(0, 200) || undefined;
+  if (typeof body === 'string') {
+    const text = body;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      return text.slice(0, 200) || undefined;
+    }
+  }
   if (!isObject(body)) return undefined;
   const d = body['detail'] ?? body['error'] ?? body['message'];
   if (typeof d === 'string') return d;

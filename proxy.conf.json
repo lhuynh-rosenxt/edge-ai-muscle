@@ -1,6 +1,6 @@
 {
   "/jetson": {
-    "target": "http://netbird.kiromerlab.com:8000",
+    "target": "https://edgeai.kiromerlab.com:8000",
     "secure": false,
     "changeOrigin": true,
     "pathRewrite": { "^/jetson": "" }

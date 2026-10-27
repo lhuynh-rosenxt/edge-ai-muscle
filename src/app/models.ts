@@ -81,6 +81,7 @@ export interface DeviceStatus {
   cpuTemp?: number;
   ramUsedMb?: number;
   mode: 'mock' | 'live';
+  error?: string;
 }
 
 export interface EdgeSettings {
