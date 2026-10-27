@@ -28,11 +28,26 @@ export interface Overlay {
   fascicle: [Point, Point];
 }
 
+export interface DeviceResources {
+  gpuLoadPct?: number;
+  gpuFreqMhz?: number;
+  cpuSystemPct?: number;
+  ramUsedMb?: number;
+  cpuTemp?: number;
+  gpuTemp?: number;
+}
+
 export interface InferenceResult {
   metrics: MuscleMetrics;
-  confidence: number;
+  /** Not provided by the Jetson API; only set in demo mode. */
+  confidence?: number;
   inferenceMs: number;
+  latencyMs?: number;
+  decodeMs?: number;
+  pxPerCm?: number;
+  requestId?: string;
   device: string;
+  resources?: DeviceResources;
   overlay?: Overlay;
 }
 
@@ -63,6 +78,8 @@ export interface DeviceStatus {
   model: string;
   gpuTemp?: number;
   gpuLoad?: number;
+  cpuTemp?: number;
+  ramUsedMb?: number;
   mode: 'mock' | 'live';
 }
 

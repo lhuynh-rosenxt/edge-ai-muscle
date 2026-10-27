@@ -13,7 +13,7 @@ import { StatusBadge } from './status-badge';
       <ul>
         @for (r of records(); track r.id) {
           <li [class.active]="r.id === selectedId()" (click)="select.emit(r.id)">
-            <img [src]="r.imageUrl" alt="" />
+            @if (r.imageUrl) { <img [src]="r.imageUrl" alt="" /> } @else { <span class="thumb"></span> }
             <div class="info">
               <span class="name" [title]="r.fileName">{{ r.fileName }}</span>
               <span class="meta">
@@ -34,7 +34,7 @@ import { StatusBadge } from './status-badge';
     li { display: flex; gap: .6rem; align-items: center; padding: .45rem; border-radius: 10px; cursor: pointer; border: 1px solid transparent; }
     li:hover { background: var(--surface-2); }
     li.active { background: var(--primary-soft); border-color: var(--primary); }
-    img { width: 56px; height: 44px; object-fit: cover; border-radius: 6px; background: #000; flex: none; }
+    img, .thumb { width: 56px; height: 44px; object-fit: cover; border-radius: 6px; background: #000; flex: none; }
     .info { display: flex; flex-direction: column; gap: .15rem; min-width: 0; flex: 1; align-items: flex-start; }
     .name { font-weight: 600; font-size: .85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
     .meta { font-size: .75rem; color: var(--muted); }

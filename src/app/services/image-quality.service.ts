@@ -1,8 +1,9 @@
 import { Injectable } from '@angular/core';
 import { QualityReport } from '../models';
 
-export const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/bmp'];
-export const MAX_BYTES = 10 * 1024 * 1024;
+export const ACCEPTED_EXTENSIONS = ['.tif', '.tiff', '.png', '.jpg', '.jpeg', '.bmp'];
+export const ACCEPT_ATTR = ACCEPTED_EXTENSIONS.join(',') + ',image/tiff,image/png,image/jpeg,image/bmp';
+export const MAX_BYTES = 20 * 1024 * 1024;
 
 const MIN_SIDE = 256;
 const BRIGHTNESS_RANGE: [number, number] = [25, 210];
@@ -13,20 +14,44 @@ const MAX_CHROMA = 30;
 /** Client-side pre-check so obviously bad images never reach the Jetson Nano. */
 @Injectable({ providedIn: 'root' })
 export class ImageQualityService {
+  /** Browsers cannot render TIFF, so decode it to a PNG blob URL for preview and analysis. */
+  async toDisplayUrl(file: File): Promise<string> {
+    if (!isTiff(file)) return URL.createObjectURL(file);
+    try {
+      const mod = await import('utif');
+      // utif is CommonJS; the bundler may expose it under `default`.
+      const UTIF = mod.default ?? mod;
+      const buf = await file.arrayBuffer();
+      const ifd = UTIF.decode(buf)[0];
+      UTIF.decodeImage(buf, ifd);
+      const rgba = UTIF.toRGBA8(ifd);
+      const canvas = document.createElement('canvas');
+      canvas.width = ifd.width;
+      canvas.height = ifd.height;
+      canvas.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(rgba), ifd.width, ifd.height), 0, 0);
+      const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/png'));
+      return blob ? URL.createObjectURL(blob) : '';
+    } catch {
+      return '';
+    }
+  }
+
   async check(file: File, url: string): Promise<QualityReport> {
     const empty: QualityReport = {
       ok: false, score: 0, width: 0, height: 0, brightness: 0, contrast: 0, sharpness: 0, issues: [],
     };
 
-    if (!ACCEPTED_TYPES.includes(file.type)) {
-      return { ...empty, issues: [`Định dạng "${file.type || 'không rõ'}" không được hỗ trợ (chỉ JPG, PNG, BMP).`] };
+    const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+    if (!ACCEPTED_EXTENSIONS.includes(ext)) {
+      return { ...empty, issues: [`Định dạng "${ext || 'không rõ'}" không được hỗ trợ (TIF, PNG, JPG, BMP).`] };
     }
     if (file.size > MAX_BYTES) {
-      return { ...empty, issues: [`Dung lượng ${(file.size / 1048576).toFixed(1)} MB vượt quá giới hạn 10 MB.`] };
+      return { ...empty, issues: [`Dung lượng ${(file.size / 1048576).toFixed(1)} MB vượt quá giới hạn 20 MB.`] };
     }
 
     let img: HTMLImageElement;
     try {
+      if (!url) throw new Error();
       img = await loadImage(url);
     } catch {
       return { ...empty, issues: ['Không đọc được nội dung ảnh (tệp hỏng?).'] };
@@ -114,6 +139,10 @@ export class ImageQualityService {
       issues,
     };
   }
+}
+
+function isTiff(file: File): boolean {
+  return file.type === 'image/tiff' || /\.tiff?$/i.test(file.name);
 }
 
 function loadImage(url: string): Promise<HTMLImageElement> {

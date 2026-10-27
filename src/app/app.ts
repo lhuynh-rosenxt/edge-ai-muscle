@@ -2,7 +2,7 @@ import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DeviceStatus } from './models';
 import { AnalysisStore } from './services/analysis.store';
-import { EdgeApiService } from './services/edge-api.service';
+import { DEFAULT_BASE_URL, EdgeApiService } from './services/edge-api.service';
 import { ToastService } from './services/toast.service';
 import { downloadCsv, recordsToCsv } from './services/csv';
 import { UploadPanel } from './components/upload-panel';
@@ -29,6 +29,7 @@ export class App {
   protected readonly draftUrl = signal(this.api.settings().baseUrl);
   protected readonly draftMock = signal(this.api.settings().mock);
   protected readonly exportScope = signal<ExportScope>('approved');
+  protected readonly defaultUrl = DEFAULT_BASE_URL;
 
   constructor() {
     this.refreshDevice();
@@ -48,8 +49,8 @@ export class App {
 
   protected saveSettings(): void {
     const url = this.draftUrl().trim().replace(/\/+$/, '');
-    if (!this.draftMock() && !/^https?:\/\/\S+$/i.test(url)) {
-      this.toast.show('error', 'Địa chỉ thiết bị không hợp lệ', ['Ví dụ: http://192.168.55.1:8000']);
+    if (!this.draftMock() && !/^(https?:\/\/\S+|\/[\w\-/]*)$/i.test(url)) {
+      this.toast.show('error', 'Địa chỉ thiết bị không hợp lệ', ['Ví dụ: /jetson hoặc http://100.80.70.189:8000']);
       return;
     }
     this.api.updateSettings({ baseUrl: url, mock: this.draftMock() });

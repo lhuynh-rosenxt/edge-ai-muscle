@@ -1,6 +1,7 @@
-import { Component, computed, input, signal } from '@angular/core';
+import { Component, computed, inject, input, signal } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { AnalysisRecord } from '../models';
+import { AnalysisStore } from '../services/analysis.store';
 import { StatusBadge } from './status-badge';
 
 @Component({
@@ -14,7 +15,11 @@ import { StatusBadge } from './status-badge';
     </div>
 
     <div class="image-wrap">
-      <img [src]="r.imageUrl" [alt]="r.fileName" />
+      @if (r.imageUrl) {
+        <img [src]="r.imageUrl" [alt]="r.fileName" />
+      } @else {
+        <div class="no-preview">{{ r.stage === 'checking' ? 'Đang giải mã ảnh…' : 'Không hiển thị được ảnh xem trước' }}</div>
+      }
       @if (showOverlay() && overlay(); as o) {
         <svg [attr.viewBox]="'0 0 ' + r.quality!.width + ' ' + r.quality!.height" preserveAspectRatio="none">
           <line [attr.x1]="o.superficial[0][0]" [attr.y1]="o.superficial[0][1]" [attr.x2]="o.superficial[1][0]" [attr.y2]="o.superficial[1][1]" class="apo" />
@@ -22,8 +27,8 @@ import { StatusBadge } from './status-badge';
           <line [attr.x1]="o.fascicle[0][0]" [attr.y1]="o.fascicle[0][1]" [attr.x2]="o.fascicle[1][0]" [attr.y2]="o.fascicle[1][1]" class="fas" />
         </svg>
       }
-      @if (r.stage === 'processing' || r.stage === 'checking') {
-        <div class="busy"><span class="spinner"></span>{{ r.stage === 'checking' ? 'Đang kiểm tra chất lượng ảnh…' : 'Jetson Nano đang suy luận…' }}</div>
+      @if (r.stage === 'processing' || r.stage === 'checking' || r.stage === 'queued') {
+        <div class="busy"><span class="spinner"></span>{{ busyLabel[r.stage] }}</div>
       }
     </div>
 
@@ -38,9 +43,12 @@ import { StatusBadge } from './status-badge';
     @switch (r.stage) {
       @case ('quality_failed') {
         <div class="alert warn">
-          <strong>Ảnh không đạt yêu cầu – không gửi tới thiết bị biên.</strong>
+          <strong>Ảnh không đạt yêu cầu.</strong>
           <ul>@for (i of r.quality?.issues; track $index) { <li>{{ i }}</li> }</ul>
-          <p>Vui lòng chụp lại ảnh và tải lên lần nữa.</p>
+          <p>Vui lòng chụp lại ảnh và tải lên lần nữa, hoặc nếu bạn chắc chắn ảnh dùng được:</p>
+          @if (r.quality?.width) {
+            <button type="button" class="btn ghost sm" (click)="store.forceAnalyze(r.id)">Vẫn gửi tới Jetson Nano</button>
+          }
         </div>
       }
       @case ('error') {
@@ -48,6 +56,7 @@ import { StatusBadge } from './status-badge';
           <strong>Không xử lý được ảnh.</strong>
           <p>{{ r.error }}</p>
           <p>Kiểm tra kết nối tới Jetson Nano trong mục Cài đặt.</p>
+          <button type="button" class="btn ghost sm" (click)="store.forceAnalyze(r.id)">Thử lại</button>
         </div>
       }
       @case ('done') {
@@ -70,12 +79,28 @@ import { StatusBadge } from './status-badge';
             @if (f && f.fl !== m.fl) { <span class="ai">AI: {{ m.fl | number: '1.2-2' }} mm</span> }
           </div>
         </div>
+        @let res = r.result!;
         <div class="facts">
-          <span>Độ tin cậy <b [class.low]="r.result!.confidence < 0.75">{{ r.result!.confidence * 100 | number: '1.0-0' }}%</b></span>
-          <span>Thời gian suy luận <b>{{ r.result!.inferenceMs | number: '1.0-1' }} ms</b></span>
+          @if (res.confidence !== undefined) {
+            <span>Độ tin cậy <b [class.low]="res.confidence < 0.75">{{ res.confidence * 100 | number: '1.0-0' }}%</b></span>
+          }
+          <span>Suy luận <b>{{ res.inferenceMs | number: '1.0-1' }} ms</b></span>
+          @if (res.latencyMs !== undefined) { <span>Tổng độ trễ <b>{{ res.latencyMs | number: '1.0-1' }} ms</b></span> }
+          @if (res.pxPerCm !== undefined) { <span>Tỉ lệ <b>{{ res.pxPerCm | number: '1.0-1' }} px/cm</b></span> }
           <span>Chất lượng ảnh <b>{{ r.quality!.score }}/100</b></span>
-          <span>Thiết bị <b>{{ r.result!.device }}</b></span>
+          <span>Thiết bị <b>{{ res.device }}</b></span>
+          @if (res.requestId) { <span>Request <b>{{ res.requestId }}</b></span> }
         </div>
+        @if (res.resources; as hw) {
+          <div class="facts hw">
+            @if (hw.gpuLoadPct !== undefined) { <span>GPU <b>{{ hw.gpuLoadPct | number: '1.0-0' }}%</b></span> }
+            @if (hw.gpuFreqMhz !== undefined) { <span>GPU freq <b>{{ hw.gpuFreqMhz | number: '1.0-0' }} MHz</b></span> }
+            @if (hw.cpuSystemPct !== undefined) { <span>CPU <b>{{ hw.cpuSystemPct | number: '1.0-0' }}%</b></span> }
+            @if (hw.ramUsedMb !== undefined) { <span>RAM <b>{{ hw.ramUsedMb | number: '1.0-0' }} MB</b></span> }
+            @if (hw.cpuTemp !== undefined) { <span>CPU <b>{{ hw.cpuTemp }}°C</b></span> }
+            @if (hw.gpuTemp !== undefined) { <span>GPU <b>{{ hw.gpuTemp }}°C</b></span> }
+          </div>
+        }
       }
     }
   `,
@@ -104,6 +129,9 @@ import { StatusBadge } from './status-badge';
     .facts { display: flex; flex-wrap: wrap; gap: .4rem 1.2rem; margin-top: .75rem; font-size: .82rem; color: var(--muted); }
     .facts b { color: var(--text); }
     .facts b.low { color: var(--warn); }
+    .facts.hw { margin-top: .35rem; padding-top: .35rem; border-top: 1px dashed var(--border); }
+    .no-preview { height: 260px; display: grid; place-items: center; color: #94a3b8; line-height: 1.4; }
+    .alert .btn { margin-top: .6rem; }
     .alert { margin-top: 1rem; padding: .9rem 1rem; border-radius: var(--radius); font-size: .88rem; }
     .alert ul { margin: .4rem 0; padding-left: 1.2rem; }
     .alert p { margin: .3rem 0 0; }
@@ -113,7 +141,13 @@ import { StatusBadge } from './status-badge';
   `,
 })
 export class ResultViewer {
+  protected readonly store = inject(AnalysisStore);
   readonly record = input.required<AnalysisRecord>();
+  protected readonly busyLabel: Record<string, string> = {
+    checking: 'Đang kiểm tra chất lượng ảnh…',
+    queued: 'Đang chờ gửi tới Jetson…',
+    processing: 'Jetson Nano đang suy luận…',
+  };
   protected readonly showOverlay = signal(true);
   protected readonly overlay = computed(() => {
     const r = this.record();

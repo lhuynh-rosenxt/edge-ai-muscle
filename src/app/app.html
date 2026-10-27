@@ -17,6 +17,7 @@
         <span>
           {{ d.online ? 'Trực tuyến' : 'Mất kết nối' }} · {{ d.model }}
           @if (d.gpuTemp != null) { · GPU {{ d.gpuTemp }}°C }
+          @if (d.cpuTemp != null) { · CPU {{ d.cpuTemp }}°C }
           @if (d.gpuLoad != null) { · {{ d.gpuLoad }}% }
         </span>
       </div>
@@ -102,9 +103,14 @@
         Chế độ demo (giả lập Jetson Nano, không cần phần cứng)
       </label>
       <label class="field">Địa chỉ API Jetson Nano
-        <input type="url" [disabled]="draftMock()" [ngModel]="draftUrl()" (ngModelChange)="draftUrl.set($event)" placeholder="http://192.168.55.1:8000" />
+        <input type="text" [disabled]="draftMock()" [ngModel]="draftUrl()" (ngModelChange)="draftUrl.set($event)" placeholder="/jetson" />
       </label>
-      <p class="hint">Endpoint: <code>GET /api/health</code>, <code>POST /api/analyze</code> (multipart, trường <code>file</code>).</p>
+      <p class="hint">
+        <code>/jetson</code> = qua proxy của dev server tới <code>http://netbird.kiromerlab.com:8000</code> (tránh lỗi CORS).
+        Có thể nhập URL trực tiếp, ví dụ <code>http://100.80.70.189:8000</code> (server cần bật CORS).
+        Endpoint: <code>GET /health</code>, <code>POST /predict</code>.
+        <button type="button" class="link" (click)="draftUrl.set(defaultUrl)">Dùng mặc định</button>
+      </p>
       <div class="dialog-actions">
         <button type="button" class="btn ghost" (click)="settingsOpen.set(false)">Hủy</button>
         <button type="button" class="btn primary" (click)="saveSettings()">Lưu</button>
