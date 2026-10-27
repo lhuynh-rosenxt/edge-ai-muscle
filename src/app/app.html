@@ -1,0 +1,116 @@
+<header class="topbar">
+  <div class="brand">
+    <div class="logo" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="26" height="26"><path fill="currentColor" d="M3 13h2l2-6 3 12 3-9 2 3h6v2h-7l-1-1.5-3 9-3-12-1 3.5H3z"/></svg>
+    </div>
+    <div>
+      <h1>Edge-AI Muscle Ultrasound</h1>
+      <p>Hệ thống thông minh Edge-AI ước lượng cấu trúc cơ thời gian thực từ ảnh siêu âm trên nền tảng Jetson Nano</p>
+    </div>
+  </div>
+
+  <div class="device">
+    @if (device(); as d) {
+      <span class="dot" [class.on]="d.online"></span>
+      <div class="dev-info">
+        <strong>{{ d.device }}</strong>
+        <span>
+          {{ d.online ? 'Trực tuyến' : 'Mất kết nối' }} · {{ d.model }}
+          @if (d.gpuTemp != null) { · GPU {{ d.gpuTemp }}°C }
+          @if (d.gpuLoad != null) { · {{ d.gpuLoad }}% }
+        </span>
+      </div>
+      @if (d.mode === 'mock') { <span class="mock">DEMO</span> }
+    } @else {
+      <span class="dot"></span><span class="dev-info">Đang kết nối…</span>
+    }
+    <button type="button" class="btn ghost sm" (click)="openSettings()">Cài đặt</button>
+  </div>
+</header>
+
+<section class="stats">
+  <div><b>{{ store.stats().total }}</b><span>Ảnh đã tải</span></div>
+  <div><b>{{ store.stats().done }}</b><span>Đã xử lý</span></div>
+  <div class="warn"><b>{{ store.stats().qualityFailed }}</b><span>Ảnh không đạt</span></div>
+  <div class="info"><b>{{ store.stats().pending }}</b><span>Chờ thẩm định</span></div>
+  <div class="ok"><b>{{ store.stats().approved }}</b><span>Đã chấp nhận</span></div>
+  <div class="danger"><b>{{ store.stats().rejected }}</b><span>Đã từ chối</span></div>
+</section>
+
+<main class="layout">
+  <aside class="card side">
+    <h2>1. Tải ảnh siêu âm</h2>
+    <app-upload-panel (files)="store.addFiles($event)" />
+
+    <div class="list-head">
+      <h2>Danh sách ảnh</h2>
+      @if (store.stats().busy) { <span class="busy">Đang xử lý…</span> }
+    </div>
+    <app-record-list
+      [records]="store.records()"
+      [selectedId]="store.selectedId()"
+      (select)="store.selectedId.set($event)"
+      (remove)="store.remove($event)"
+    />
+
+    <div class="export">
+      <h2>3. Xuất dữ liệu</h2>
+      <div class="row">
+        <select [ngModel]="exportScope()" (ngModelChange)="exportScope.set($event)" aria-label="Phạm vi xuất">
+          <option value="approved">Chỉ kết quả đã chấp nhận</option>
+          <option value="reviewed">Tất cả kết quả đã thẩm định</option>
+          <option value="all">Toàn bộ (kể cả ảnh lỗi)</option>
+        </select>
+        <button type="button" class="btn primary" (click)="exportCsv()">Tải CSV</button>
+      </div>
+    </div>
+  </aside>
+
+  <section class="card main">
+    @if (store.selected(); as rec) {
+      <div class="detail">
+        <div class="viewer">
+          <app-result-viewer [record]="rec" />
+        </div>
+        @if (rec.stage === 'done') {
+          <div class="review">
+            <app-review-panel [record]="rec" />
+          </div>
+        }
+      </div>
+    } @else {
+      <div class="placeholder">
+        <h2>2. Kết quả phân tích</h2>
+        <p>Tải ảnh siêu âm cơ (mặt cắt dọc) để thiết bị biên Jetson Nano ước lượng:</p>
+        <ul>
+          <li><b>MT</b> – Muscle Thickness: độ dày cơ (mm)</li>
+          <li><b>PA</b> – Pennation Angle: góc lông chim (°)</li>
+          <li><b>FL</b> – Fascicle Length: chiều dài bó cơ (mm)</li>
+        </ul>
+        <p>Chuyên gia kiểm tra và quyết định chấp nhận, hiệu chỉnh hoặc từ chối từng kết quả.</p>
+      </div>
+    }
+  </section>
+</main>
+
+@if (settingsOpen()) {
+  <div class="backdrop" (click)="settingsOpen.set(false)">
+    <div class="dialog card" role="dialog" aria-modal="true" aria-labelledby="settings-title" (click)="$event.stopPropagation()">
+      <h2 id="settings-title">Cài đặt thiết bị biên</h2>
+      <label class="check">
+        <input type="checkbox" [ngModel]="draftMock()" (ngModelChange)="draftMock.set($event)" />
+        Chế độ demo (giả lập Jetson Nano, không cần phần cứng)
+      </label>
+      <label class="field">Địa chỉ API Jetson Nano
+        <input type="url" [disabled]="draftMock()" [ngModel]="draftUrl()" (ngModelChange)="draftUrl.set($event)" placeholder="http://192.168.55.1:8000" />
+      </label>
+      <p class="hint">Endpoint: <code>GET /api/health</code>, <code>POST /api/analyze</code> (multipart, trường <code>file</code>).</p>
+      <div class="dialog-actions">
+        <button type="button" class="btn ghost" (click)="settingsOpen.set(false)">Hủy</button>
+        <button type="button" class="btn primary" (click)="saveSettings()">Lưu</button>
+      </div>
+    </div>
+  </div>
+}
+
+<app-toasts />
