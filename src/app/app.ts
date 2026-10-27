@@ -55,6 +55,11 @@ export class App {
     }
     this.api.updateSettings({ baseUrl: url, mock: this.draftMock() });
     this.settingsOpen.set(false);
+    if (!this.draftMock() && location.protocol === 'https:' && url.startsWith('http://')) {
+      this.toast.show('warning', 'Trình duyệt sẽ chặn API HTTP trên trang HTTPS', [
+        'Hãy dùng địa chỉ HTTPS cho Jetson (VD: Cloudflare Tunnel, ngrok) và bật CORS trên server.',
+      ]);
+    }
     this.refreshDevice();
   }
 

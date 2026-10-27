@@ -1,12 +1,13 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, inject, isDevMode, signal } from '@angular/core';
 import { TimeoutError, firstValueFrom, timeout } from 'rxjs';
 import {
   DeviceResources, DeviceStatus, EdgeSettings, InferenceResult, Point, QualityRejectedError, QualityReport,
 } from '../models';
 
 const SETTINGS_KEY = 'edge-ai.settings.v2';
-export const DEFAULT_BASE_URL = '/jetson';
+// The /jetson proxy only exists under `ng serve`; deployed builds must be configured in Settings.
+export const DEFAULT_BASE_URL = isDevMode() ? '/jetson' : '';
 
 /** Response of POST /predict (see README_API.md). */
 interface PredictResponse {
@@ -45,6 +46,9 @@ export class EdgeApiService {
         mode: 'mock',
       };
     }
+    if (!baseUrl) {
+      return { online: false, device: 'Jetson Nano', model: 'Chưa cấu hình địa chỉ API', mode: 'live' };
+    }
     try {
       const r = await firstValueFrom(
         this.http.get<Record<string, unknown>>(`${baseUrl}/health`).pipe(timeout(5000)),
@@ -69,6 +73,7 @@ export class EdgeApiService {
   async analyze(file: File, quality: QualityReport): Promise<InferenceResult> {
     const { baseUrl, mock } = this.settings();
     if (mock) return mockAnalyze(quality);
+    if (!baseUrl) throw new Error('Chưa cấu hình địa chỉ API Jetson trong mục Cài đặt.');
 
     // The server derives px_per_cm from the original file name/extension, so keep it intact.
     const form = new FormData();
